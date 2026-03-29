@@ -16,21 +16,18 @@ public class GithubService {
     public String cloneRepository(String repoUrl) {
 
         try {
-            // Create temp directory
-            Files.createDirectories(Paths.get(TEMP_DIR));
+            File tempDir = new File(TEMP_DIR);
+
+            // 🔥 STEP 1: Clean old repos (VERY IMPORTANT)
+            if (tempDir.exists()) {
+                deleteDirectory(tempDir);
+            }
+            tempDir.mkdirs();
 
             // Extract repo name
             String repoName = repoUrl.substring(repoUrl.lastIndexOf("/") + 1);
-            String extractPath = TEMP_DIR + repoName;
 
-            File repoFolder = new File(extractPath);
-
-            // Delete if already exists
-            if (repoFolder.exists()) {
-                deleteDirectory(repoFolder);
-            }
-
-            // Try main branch first, then master
+            // 🔥 STEP 2: Try main and master branch
             String zipUrlMain = repoUrl + "/archive/refs/heads/main.zip";
             String zipUrlMaster = repoUrl + "/archive/refs/heads/master.zip";
 
@@ -43,9 +40,9 @@ public class GithubService {
             }
 
             ZipInputStream zis = new ZipInputStream(in);
-
             ZipEntry entry;
 
+            // 🔥 STEP 3: Extract zip
             while ((entry = zis.getNextEntry()) != null) {
 
                 File file = new File(TEMP_DIR, entry.getName());
@@ -70,7 +67,18 @@ public class GithubService {
 
             zis.close();
 
-            return TEMP_DIR;
+            // 🔥 STEP 4: Return correct extracted repo folder
+            File[] files = tempDir.listFiles();
+
+            if (files != null) {
+                for (File f : files) {
+                    if (f.getName().startsWith(repoName)) {
+                        return f.getAbsolutePath(); // ✅ correct repo folder
+                    }
+                }
+            }
+
+            throw new RuntimeException("Repo extraction failed");
 
         } catch (Exception e) {
             throw new RuntimeException("Error downloading repo: " + e.getMessage());
