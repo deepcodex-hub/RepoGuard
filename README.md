@@ -6,6 +6,18 @@ It is designed to simulate how real-world security tools analyze source code and
 
 ---
 
+## 🌐 Live Demo
+
+👉 Try the deployed API here:
+
+```text
+https://repoguard-e281.onrender.com/swagger-ui/index.html
+```
+
+You can directly test the `/api/scan` endpoint using Swagger UI.
+
+---
+
 ## 🚀 Key Features
 
 ### 🔍 Static Application Security Testing (SAST)
@@ -45,10 +57,10 @@ Scans project dependencies for known vulnerabilities:
 
 ## 🧠 System Workflow
 
-```
+```text
 User → GitHub Repository URL
         ↓
-Repository Cloned / Downloaded
+Repository Downloaded (ZIP-based)
         ↓
 File Filtering (.java + pom.xml)
         ↓
@@ -62,6 +74,27 @@ Results Returned via API (Swagger UI)
 
 ---
 
+## 🔥 Robust Features
+
+* Handles GitHub URLs with `.git` suffix and trailing slashes
+* Supports multiple branch formats (`main`, `master`, etc.)
+* Uses ZIP-based repository download for cloud compatibility
+* Encodes external API requests to prevent failures
+* Provides structured error responses using global exception handling
+* Designed to handle real-world GitHub repository variations and edge cases
+
+---
+
+## 🚀 Key Improvements
+
+* Fixed 500 errors caused by improper URL parsing
+* Improved repository extraction logic for ZIP archives
+* Added global exception handling for better debugging
+* Enhanced fix suggestion consistency (API key detection)
+* Made system fully compatible with cloud deployment (Render + Docker)
+
+---
+
 ## 🛠️ Tech Stack
 
 * Java 17
@@ -69,6 +102,8 @@ Results Returned via API (Swagger UI)
 * Swagger (Springdoc OpenAPI)
 * NVD API (CVE database)
 * Git / GitHub
+* Docker
+* Render (Deployment)
 
 ---
 
@@ -76,7 +111,7 @@ Results Returned via API (Swagger UI)
 
 ### 1️⃣ Clone the Repository
 
-```
+```bash
 git clone https://github.com/deepcodex-hub/repoguard.git
 cd repoguard
 ```
@@ -85,7 +120,7 @@ cd repoguard
 
 ### 2️⃣ Run the Application
 
-```
+```bash
 mvn spring-boot:run
 ```
 
@@ -93,7 +128,7 @@ mvn spring-boot:run
 
 ### 3️⃣ Open Swagger UI
 
-```
+```text
 http://localhost:8080/swagger-ui/index.html
 ```
 
@@ -103,13 +138,13 @@ http://localhost:8080/swagger-ui/index.html
 
 Endpoint:
 
-```
+```text
 POST /api/scan
 ```
 
 Example Input:
 
-```
+```text
 https://github.com/spring-projects/spring-petclinic
 ```
 
@@ -134,7 +169,8 @@ https://github.com/spring-projects/spring-petclinic
 ## ⚠️ Limitations
 
 * Uses rule-based pattern matching (may produce false positives)
-* Does not use AST-based or deep data-flow analysis
+* Does not perform deep AST or data-flow analysis
+* Dependency resolution is basic (no full transitive analysis)
 
 ---
 
@@ -158,6 +194,6 @@ The system was tested using:
 
 ## ⭐ Final Note
 
-RepoGuard demonstrates a practical approach to repository-level security analysis by combining code scanning and dependency vulnerability detection in a modular and scalable architecture.
+RepoGuard demonstrates a practical approach to repository-level security analysis by combining code scanning and dependency vulnerability detection in a modular and scalable architecture, with strong focus on real-world robustness and deployment readiness.
 
 ---
