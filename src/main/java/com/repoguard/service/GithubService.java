@@ -25,25 +25,23 @@ public class GithubService {
 
             File repoFolder = new File(extractPath);
 
-            // Delete if exists
+            // Delete if already exists
             if (repoFolder.exists()) {
                 deleteDirectory(repoFolder);
             }
 
-            // Convert GitHub URL to ZIP URL
+            // Try main branch first, then master
             String zipUrlMain = repoUrl + "/archive/refs/heads/main.zip";
-String zipUrlMaster = repoUrl + "/archive/refs/heads/master.zip";
+            String zipUrlMaster = repoUrl + "/archive/refs/heads/master.zip";
 
-InputStream in;
+            InputStream in;
 
-try {
-    in = new URL(zipUrlMain).openStream();
-} catch (Exception e) {
-    in = new URL(zipUrlMaster).openStream();
-}
+            try {
+                in = new URL(zipUrlMain).openStream();
+            } catch (Exception e) {
+                in = new URL(zipUrlMaster).openStream();
+            }
 
-            // Download ZIP
-            InputStream in = new URL(zipUrl).openStream();
             ZipInputStream zis = new ZipInputStream(in);
 
             ZipEntry entry;
@@ -79,6 +77,7 @@ try {
         }
     }
 
+    // Utility method to delete folder
     private void deleteDirectory(File file) {
         if (file.isDirectory()) {
             for (File sub : file.listFiles()) {
