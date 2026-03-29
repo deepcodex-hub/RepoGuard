@@ -23,7 +23,7 @@ public class FixSuggestionService {
             else if (issue.toLowerCase().contains("password")) {
                 enhanced.add(issue + " → Fix: Do not hardcode passwords. Use environment variables.");
             }
-            else if (issue.toLowerCase().contains("apikey") || issue.toLowerCase().contains("token")) {
+            else if (issue.toLowerCase().contains("apikey") || issue.toLowerCase().contains("api key") || issue.toLowerCase().contains("token")) {
                 enhanced.add(issue + " → Fix: Store secrets securely (Vault/ENV).");
             }
             else if (issue.toLowerCase().contains("dependency")) {
