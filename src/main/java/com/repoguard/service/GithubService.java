@@ -31,7 +31,16 @@ public class GithubService {
             }
 
             // Convert GitHub URL to ZIP URL
-            String zipUrl = repoUrl + "/archive/refs/heads/main.zip";
+            String zipUrlMain = repoUrl + "/archive/refs/heads/main.zip";
+String zipUrlMaster = repoUrl + "/archive/refs/heads/master.zip";
+
+InputStream in;
+
+try {
+    in = new URL(zipUrlMain).openStream();
+} catch (Exception e) {
+    in = new URL(zipUrlMaster).openStream();
+}
 
             // Download ZIP
             InputStream in = new URL(zipUrl).openStream();
