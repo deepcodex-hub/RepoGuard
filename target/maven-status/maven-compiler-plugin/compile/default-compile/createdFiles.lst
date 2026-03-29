@@ -1,6 +1,6 @@
-com\repoguard\config\SecurityConfig.class
 com\repoguard\service\SCAScanner.class
 com\repoguard\controller\ScanController.class
+com\repoguard\controller\GlobalExceptionHandler.class
 com\repoguard\scanner\SQLInjectionScanner.class
 com\repoguard\model\ScanResult.class
 com\repoguard\service\NVDService.class

@@ -5,7 +5,10 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @Service
 public class NVDService {
@@ -13,9 +16,10 @@ public class NVDService {
     public String fetchVulnerabilities(String query) {
 
         try {
-            String apiUrl = "https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=" + query;
+            String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8.toString());
+            String apiUrl = "https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=" + encodedQuery;
 
-            URL url = new URL(apiUrl);
+            URL url = URI.create(apiUrl).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
             conn.setRequestMethod("GET");
