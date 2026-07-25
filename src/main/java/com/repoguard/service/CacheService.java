@@ -2,13 +2,13 @@ package com.repoguard.service;
 
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
 @Service
 public class CacheService {
 
-    private final Map<String, String> cache = new HashMap<>();
+    private final Map<String, String> cache = new ConcurrentHashMap<>();
 
     public boolean contains(String key) {
         return cache.containsKey(key);

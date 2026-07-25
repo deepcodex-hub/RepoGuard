@@ -1,5 +1,6 @@
 package com.repoguard.service;
 
+import com.repoguard.model.Vulnerability;
 import com.repoguard.scanner.SQLInjectionScanner;
 import com.repoguard.scanner.SensitiveDataScanner;
 import com.repoguard.scanner.XSSScanner;
@@ -22,19 +23,19 @@ public class SASTService {
     @Autowired
     private SensitiveDataScanner sensitiveDataScanner;
 
-    public List<String> runSAST(List<File> javaFiles) {
+    public List<Vulnerability> runSAST(List<File> javaFiles) {
 
-        List<String> issues = new ArrayList<>();
+        List<Vulnerability> vulnerabilities = new ArrayList<>();
 
         // SQL Injection
-        issues.addAll(sqlInjectionScanner.scan(javaFiles));
+        vulnerabilities.addAll(sqlInjectionScanner.scan(javaFiles));
 
         // XSS
-        issues.addAll(xssScanner.scan(javaFiles));
+        vulnerabilities.addAll(xssScanner.scan(javaFiles));
 
         // Sensitive Data
-        issues.addAll(sensitiveDataScanner.scan(javaFiles));
+        vulnerabilities.addAll(sensitiveDataScanner.scan(javaFiles));
 
-        return issues;
+        return vulnerabilities;
     }
 }

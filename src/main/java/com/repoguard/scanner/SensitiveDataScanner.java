@@ -1,5 +1,7 @@
 package com.repoguard.scanner;
 
+import com.repoguard.model.Severity;
+import com.repoguard.model.Vulnerability;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -10,9 +12,9 @@ import java.util.List;
 @Component
 public class SensitiveDataScanner {
 
-    public List<String> scan(List<File> javaFiles) {
+    public List<Vulnerability> scan(List<File> javaFiles) {
 
-        List<String> issues = new ArrayList<>();
+        List<Vulnerability> vulnerabilities = new ArrayList<>();
 
         for (File file : javaFiles) {
 
@@ -22,24 +24,42 @@ public class SensitiveDataScanner {
 
                 for (String line : lines) {
 
-                    String lowerLine = line.toLowerCase();
+                    String lower = line.toLowerCase();
 
-                    // Detect hardcoded passwords
-                    if (lowerLine.contains("password") && line.contains("=")) {
-                        issues.add("Hardcoded password in file: "
-                                + file.getName() + " at line " + lineNumber);
+                    // Hardcoded passwords
+                    if (lower.contains("password") && line.contains("=")) {
+                        vulnerabilities.add(new Vulnerability(
+                                "HARDCODED_SECRET",
+                                Severity.HIGH,
+                                file.getName(),
+                                lineNumber,
+                                "Hardcoded password detected in source code.",
+                                "Do not hardcode passwords. Use environment variables or a secrets manager (AWS Secrets Manager, HashiCorp Vault)."
+                        ));
                     }
 
-                    // Detect API keys
-                    if (lowerLine.contains("apikey") || lowerLine.contains("api_key")) {
-                        issues.add("Possible API key exposure in file: "
-                                + file.getName() + " at line " + lineNumber);
+                    // Hardcoded API keys
+                    if (lower.contains("apikey") || lower.contains("api_key")) {
+                        vulnerabilities.add(new Vulnerability(
+                                "HARDCODED_SECRET",
+                                Severity.HIGH,
+                                file.getName(),
+                                lineNumber,
+                                "Possible API key exposed in source code.",
+                                "Store API keys in environment variables or a secrets manager. Never commit secrets to source control."
+                        ));
                     }
 
-                    // Detect tokens
-                    if (lowerLine.contains("token") && line.contains("=")) {
-                        issues.add("Possible token exposure in file: "
-                                + file.getName() + " at line " + lineNumber);
+                    // Hardcoded tokens
+                    if (lower.contains("token") && line.contains("=")) {
+                        vulnerabilities.add(new Vulnerability(
+                                "HARDCODED_SECRET",
+                                Severity.HIGH,
+                                file.getName(),
+                                lineNumber,
+                                "Possible token exposed in source code.",
+                                "Store tokens in environment variables or a secrets manager. Never commit secrets to source control."
+                        ));
                     }
 
                     lineNumber++;
@@ -50,6 +70,6 @@ public class SensitiveDataScanner {
             }
         }
 
-        return issues;
+        return vulnerabilities;
     }
 }

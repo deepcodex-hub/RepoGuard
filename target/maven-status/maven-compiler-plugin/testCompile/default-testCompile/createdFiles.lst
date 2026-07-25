@@ -1,0 +1,3 @@
+com\repoguard\scanner\SensitiveDataScannerTest.class
+com\repoguard\scanner\SQLInjectionScannerTest.class
+com\repoguard\scanner\XSSScannerTest.class

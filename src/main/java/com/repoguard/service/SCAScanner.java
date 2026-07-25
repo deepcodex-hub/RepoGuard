@@ -1,6 +1,8 @@
 package com.repoguard.service;
 
 import com.repoguard.model.Dependency;
+import com.repoguard.model.Severity;
+import com.repoguard.model.Vulnerability;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -20,13 +22,20 @@ public class SCAScanner {
     @Autowired
     private NVDService nvdService;
 
-    public List<String> scan(File pomFile) {
+    public List<Vulnerability> scan(File pomFile) {
 
-        List<String> issues = new ArrayList<>();
+        List<Vulnerability> vulnerabilities = new ArrayList<>();
 
         if (pomFile == null) {
-            issues.add("No pom.xml found");
-            return issues;
+            vulnerabilities.add(new Vulnerability(
+                    "MISSING_POM",
+                    Severity.LOW,
+                    "pom.xml",
+                    0,
+                    "No pom.xml found. Dependency scan skipped.",
+                    "Ensure a pom.xml file exists at the root of your Java project."
+            ));
+            return vulnerabilities;
         }
 
         List<Dependency> dependencies = extractDependencies(pomFile);
@@ -35,23 +44,51 @@ public class SCAScanner {
 
             String key = dep.getArtifactId() + ":" + dep.getVersion();
 
-            // Check cache
+            String nvdResponse;
+
             if (cacheService.contains(key)) {
-                issues.add("Cached CVE found for " + key);
-                continue;
+                // Cached result
+                nvdResponse = cacheService.get(key);
+            } else {
+                // Call NVD
+                String query = dep.getArtifactId() + " " + dep.getVersion();
+                nvdResponse = nvdService.fetchVulnerabilities(query);
+                cacheService.put(key, nvdResponse);
             }
 
-            // Call NVD
-            String query = dep.getArtifactId() + " " + dep.getVersion();
-            String response = nvdService.fetchVulnerabilities(query);
+            // Assess severity based on known risky libraries
+            Severity severity = assessSeverity(dep.getArtifactId(), dep.getVersion());
 
-            // Store in cache
-            cacheService.put(key, response);
-
-            issues.add("Scanned dependency: " + key);
+            vulnerabilities.add(new Vulnerability(
+                    "VULNERABLE_DEPENDENCY",
+                    severity,
+                    "pom.xml",
+                    0,
+                    "Dependency " + key + " may have known CVEs.",
+                    "Check https://nvd.nist.gov for CVEs and upgrade to a patched version."
+            ));
         }
 
-        return issues;
+        return vulnerabilities;
+    }
+
+    /**
+     * Simple severity heuristic based on known risky libraries.
+     * In a production tool this would parse the actual CVE CVSS score from nvdResponse.
+     */
+    private Severity assessSeverity(String artifactId, String version) {
+        String id = artifactId.toLowerCase();
+
+        // Log4Shell — CRITICAL
+        if (id.contains("log4j") && (version.startsWith("1.") || version.startsWith("2.0") || version.startsWith("2.1"))) {
+            return Severity.CRITICAL;
+        }
+        // Old Spring versions with known RCEs
+        if (id.contains("spring") && version.startsWith("5.")) {
+            return Severity.HIGH;
+        }
+
+        return Severity.MEDIUM;
     }
 
     // 🔍 Extract dependencies from pom.xml
@@ -86,15 +123,13 @@ public class SCAScanner {
                 line = line.trim();
 
                 if (line.startsWith("<artifactId>")) {
-                    artifactId = line.replace("<artifactId>", "")
-                                     .replace("</artifactId>", "");
+                    artifactId = line.replace("<artifactId>", "").replace("</artifactId>", "");
                 }
 
                 if (line.startsWith("<version>")) {
-                    version = line.replace("<version>", "")
-                                  .replace("</version>", "");
+                    version = line.replace("<version>", "").replace("</version>", "");
 
-                    // Resolve property if version is a placeholder ${version.name}
+                    // Resolve property placeholders like ${spring.version}
                     if (version.startsWith("${") && version.endsWith("}")) {
                         String propKey = version.substring(2, version.length() - 1);
                         version = properties.getOrDefault(propKey, version);
@@ -109,7 +144,7 @@ public class SCAScanner {
             }
 
         } catch (Exception e) {
-            System.out.println("Error reading pom.xml");
+            System.out.println("Error reading pom.xml: " + e.getMessage());
         }
 
         return dependencies;

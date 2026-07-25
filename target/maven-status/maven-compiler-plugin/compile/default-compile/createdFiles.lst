@@ -1,3 +1,4 @@
+com\repoguard\model\Severity.class
 com\repoguard\service\SCAScanner.class
 com\repoguard\controller\ScanController.class
 com\repoguard\controller\GlobalExceptionHandler.class

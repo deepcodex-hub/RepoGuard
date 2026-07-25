@@ -1,5 +1,7 @@
 package com.repoguard.scanner;
 
+import com.repoguard.model.Severity;
+import com.repoguard.model.Vulnerability;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -10,33 +12,41 @@ import java.util.List;
 @Component
 public class SQLInjectionScanner {
 
-    public List<String> scan(List<File> javaFiles) {
+    public List<Vulnerability> scan(List<File> javaFiles) {
 
-        List<String> issues = new ArrayList<>();
+        List<Vulnerability> vulnerabilities = new ArrayList<>();
 
         for (File file : javaFiles) {
 
             try {
                 List<String> lines = Files.readAllLines(file.toPath());
-
                 int lineNumber = 1;
 
                 for (String line : lines) {
 
-                    // Basic SQL injection pattern
-                    if (line.contains("SELECT") && line.contains("+")) {
-                        issues.add("Possible SQL Injection in file: "
-                                + file.getName() + " at line " + lineNumber);
+                    // Direct string concatenation in SQL query
+                    if ((line.contains("SELECT") || line.contains("INSERT") || line.contains("UPDATE") || line.contains("DELETE"))
+                            && line.contains("+")) {
+                        vulnerabilities.add(new Vulnerability(
+                                "SQL_INJECTION",
+                                Severity.CRITICAL,
+                                file.getName(),
+                                lineNumber,
+                                "Possible SQL Injection via string concatenation in query.",
+                                "Use PreparedStatement or parameterized queries."
+                        ));
                     }
 
-                    if (line.contains("INSERT") && line.contains("+")) {
-                        issues.add("Possible SQL Injection in file: "
-                                + file.getName() + " at line " + lineNumber);
-                    }
-
+                    // Raw Statement.execute usage
                     if (line.contains("Statement") && line.contains("execute")) {
-                        issues.add("Unsafe SQL execution in file: "
-                                + file.getName() + " at line " + lineNumber);
+                        vulnerabilities.add(new Vulnerability(
+                                "SQL_INJECTION",
+                                Severity.HIGH,
+                                file.getName(),
+                                lineNumber,
+                                "Unsafe SQL execution using raw Statement.",
+                                "Replace with PreparedStatement to prevent injection."
+                        ));
                     }
 
                     lineNumber++;
@@ -47,6 +57,6 @@ public class SQLInjectionScanner {
             }
         }
 
-        return issues;
+        return vulnerabilities;
     }
 }

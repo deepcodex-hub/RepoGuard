@@ -1,6 +1,7 @@
 package com.repoguard.service;
 
 import com.repoguard.model.ScanResult;
+import com.repoguard.model.Vulnerability;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -23,9 +24,6 @@ public class ScanOrchestrator {
     @Autowired
     private SCAScanner scaScanner;
 
-    @Autowired
-    private FixSuggestionService fixSuggestionService;
-
     public ScanResult scan(String repoUrl) {
 
         // Step 1: Clone repo
@@ -35,17 +33,14 @@ public class ScanOrchestrator {
         List<File> javaFiles = fileService.getJavaFiles(repoPath);
         File pomFile = fileService.getPomFile(repoPath);
 
-        List<String> issues = new ArrayList<>();
+        List<Vulnerability> vulnerabilities = new ArrayList<>();
 
-        // Step 3: SAST
-        issues.addAll(sastService.runSAST(javaFiles));
+        // Step 3: SAST scan
+        vulnerabilities.addAll(sastService.runSAST(javaFiles));
 
-        // Step 4: SCA
-        issues.addAll(scaScanner.scan(pomFile));
+        // Step 4: SCA scan
+        vulnerabilities.addAll(scaScanner.scan(pomFile));
 
-        // Step 5: Add fix suggestions
-        issues = fixSuggestionService.addFixSuggestions(issues);
-
-        return new ScanResult("SCAN COMPLETED", issues);
+        return new ScanResult("SCAN COMPLETED", vulnerabilities);
     }
 }
