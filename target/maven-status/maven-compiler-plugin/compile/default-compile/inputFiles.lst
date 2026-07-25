@@ -13,6 +13,7 @@ C:\Users\Deephika\repoguard\src\main\java\com\repoguard\scanner\XSSScanner.java
 C:\Users\Deephika\repoguard\src\main\java\com\repoguard\scanner\SensitiveDataScanner.java
 C:\Users\Deephika\repoguard\src\main\java\com\repoguard\service\CacheService.java
 C:\Users\Deephika\repoguard\src\main\java\com\repoguard\model\ScanResult.java
+C:\Users\Deephika\repoguard\src\main\java\com\repoguard\controller\HomeController.java
 C:\Users\Deephika\repoguard\src\main\java\com\repoguard\service\ScanOrchestrator.java
 C:\Users\Deephika\repoguard\src\main\java\com\repoguard\service\FileService.java
 C:\Users\Deephika\repoguard\src\main\java\com\repoguard\service\GithubService.java

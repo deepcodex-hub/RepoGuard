@@ -15,6 +15,7 @@ com\repoguard\RepoGuardApplication.class
 com\repoguard\service\GithubService.class
 com\repoguard\scanner\XSSScanner.class
 com\repoguard\util\FileUtils.class
+com\repoguard\controller\HomeController.class
 com\repoguard\model\Vulnerability.class
 com\repoguard\service\SASTService.class
 com\repoguard\config\SwaggerConfig.class
