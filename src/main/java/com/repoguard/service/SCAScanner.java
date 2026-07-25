@@ -10,8 +10,12 @@ import java.io.File;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class SCAScanner {
@@ -21,6 +25,8 @@ public class SCAScanner {
 
     @Autowired
     private NVDService nvdService;
+
+    private static final Pattern CVE_PATTERN = Pattern.compile("CVE-\\d{4}-\\d+");
 
     public List<Vulnerability> scan(File pomFile) {
 
@@ -43,29 +49,35 @@ public class SCAScanner {
         for (Dependency dep : dependencies) {
 
             String key = dep.getArtifactId() + ":" + dep.getVersion();
-
             String nvdResponse;
 
             if (cacheService.contains(key)) {
-                // Cached result
                 nvdResponse = cacheService.get(key);
             } else {
-                // Call NVD
                 String query = dep.getArtifactId() + " " + dep.getVersion();
                 nvdResponse = nvdService.fetchVulnerabilities(query);
                 cacheService.put(key, nvdResponse);
             }
 
-            // Assess severity based on known risky libraries
-            Severity severity = assessSeverity(dep.getArtifactId(), dep.getVersion());
+            // Extract real CVE IDs returned by NVD API response
+            Set<String> cveIds = extractCveIds(nvdResponse);
+
+            Severity severity = assessSeverity(dep.getArtifactId(), dep.getVersion(), cveIds);
+
+            String description;
+            if (!cveIds.isEmpty()) {
+                description = "Dependency " + key + " matched NVD CVEs: " + cveIds;
+            } else {
+                description = "Dependency " + key + " scanned against NVD database.";
+            }
 
             vulnerabilities.add(new Vulnerability(
                     "VULNERABLE_DEPENDENCY",
                     severity,
                     "pom.xml",
                     0,
-                    "Dependency " + key + " may have known CVEs.",
-                    "Check https://nvd.nist.gov for CVEs and upgrade to a patched version."
+                    description,
+                    "Upgrade " + dep.getArtifactId() + " to a secure patched version."
             ));
         }
 
@@ -73,19 +85,38 @@ public class SCAScanner {
     }
 
     /**
-     * Simple severity heuristic based on known risky libraries.
-     * In a production tool this would parse the actual CVE CVSS score from nvdResponse.
+     * Extracts real CVE IDs (e.g. CVE-2021-44228) from NVD JSON response.
      */
-    private Severity assessSeverity(String artifactId, String version) {
+    private Set<String> extractCveIds(String nvdResponse) {
+        Set<String> cveSet = new HashSet<>();
+        if (nvdResponse == null || nvdResponse.isEmpty() || nvdResponse.contains("Error fetching")) {
+            return cveSet;
+        }
+
+        Matcher matcher = CVE_PATTERN.matcher(nvdResponse);
+        while (matcher.find() && cveSet.size() < 5) { // Limit to top 5 distinct CVEs for readable response
+            cveSet.add(matcher.group());
+        }
+        return cveSet;
+    }
+
+    /**
+     * Assesses severity based on extracted CVEs and known critical libraries.
+     */
+    private Severity assessSeverity(String artifactId, String version, Set<String> cveIds) {
         String id = artifactId.toLowerCase();
 
-        // Log4Shell — CRITICAL
+        // If NVD returned active CVEs
+        if (!cveIds.isEmpty()) {
+            if (id.contains("log4j") || id.contains("spring")) {
+                return Severity.CRITICAL;
+            }
+            return Severity.HIGH;
+        }
+
+        // Heuristic fallback for known vulnerable components
         if (id.contains("log4j") && (version.startsWith("1.") || version.startsWith("2.0") || version.startsWith("2.1"))) {
             return Severity.CRITICAL;
-        }
-        // Old Spring versions with known RCEs
-        if (id.contains("spring") && version.startsWith("5.")) {
-            return Severity.HIGH;
         }
 
         return Severity.MEDIUM;
