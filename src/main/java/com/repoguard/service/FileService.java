@@ -20,7 +20,12 @@ public class FileService {
 
     public File getPomFile(String repoPath) {
         File root = new File(repoPath);
-        return findPomFile(root);
+        return findFileByName(root, "pom.xml");
+    }
+
+    public File getPackageJsonFile(String repoPath) {
+        File root = new File(repoPath);
+        return findFileByName(root, "package.json");
     }
 
     // 🔍 Recursively find .java files
@@ -48,24 +53,25 @@ public class FileService {
         }
     }
 
-    // 🔍 Find pom.xml
-    private File findPomFile(File dir) {
-
-        if (dir == null || !dir.exists()) return null;
+    // 🔍 Generic method to find a specific file by name
+    private File findFileByName(File dir, String fileName) {
+        if (dir == null || !dir.exists() || dir.listFiles() == null) return null;
 
         for (File file : dir.listFiles()) {
-
             if (file.isDirectory()) {
-                File result = findPomFile(file);
+                // Ignore .git, target, node_modules
+                String name = file.getName();
+                if (name.equals(".git") || name.equals("target") || name.equals("node_modules")) continue;
+                
+                File result = findFileByName(file, fileName);
                 if (result != null) return result;
-
             } else {
-                if (file.getName().equals("pom.xml")) {
+                if (file.getName().equals(fileName)) {
                     return file;
                 }
             }
         }
-
         return null;
     }
 }
+

@@ -24,6 +24,9 @@ public class ScanOrchestrator {
     @Autowired
     private SCAScanner scaScanner;
 
+    @Autowired
+    private NodeScaScanner nodeScaScanner;
+
     public ScanResult scan(String repoUrl) {
 
         // Step 1: Clone repo
@@ -32,15 +35,22 @@ public class ScanOrchestrator {
         // Step 2: Read files
         List<File> javaFiles = fileService.getJavaFiles(repoPath);
         File pomFile = fileService.getPomFile(repoPath);
+        File packageJsonFile = fileService.getPackageJsonFile(repoPath);
 
         List<Vulnerability> vulnerabilities = new ArrayList<>();
 
         // Step 3: SAST scan
         vulnerabilities.addAll(sastService.runSAST(javaFiles));
 
-        // Step 4: SCA scan
+        // Step 4: Java SCA scan
         vulnerabilities.addAll(scaScanner.scan(pomFile));
+
+        // Step 5: Node.js SCA scan
+        if (packageJsonFile != null) {
+            vulnerabilities.addAll(nodeScaScanner.scan(packageJsonFile));
+        }
 
         return new ScanResult("SCAN COMPLETED", vulnerabilities);
     }
 }
+

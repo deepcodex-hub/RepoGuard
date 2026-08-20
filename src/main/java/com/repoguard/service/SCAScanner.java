@@ -1,5 +1,7 @@
 package com.repoguard.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.model.Dependency;
 import com.repoguard.model.Severity;
 import com.repoguard.model.Vulnerability;
@@ -14,8 +16,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 public class SCAScanner {
@@ -26,7 +26,7 @@ public class SCAScanner {
     @Autowired
     private NVDService nvdService;
 
-    private static final Pattern CVE_PATTERN = Pattern.compile("CVE-\\d{4}-\\d+");
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public List<Vulnerability> scan(File pomFile) {
 
@@ -59,14 +59,17 @@ public class SCAScanner {
                 cacheService.put(key, nvdResponse);
             }
 
-            // Extract real CVE IDs returned by NVD API response
-            Set<String> cveIds = extractCveIds(nvdResponse);
+            // Extract CVSS Data from NVD API JSON
+            NvdResult result = parseNvdResponse(nvdResponse);
 
-            Severity severity = assessSeverity(dep.getArtifactId(), dep.getVersion(), cveIds);
+            Severity severity = assessSeverity(dep.getArtifactId(), dep.getVersion(), result);
 
             String description;
-            if (!cveIds.isEmpty()) {
-                description = "Dependency " + key + " matched NVD CVEs: " + cveIds;
+            if (!result.cveIds.isEmpty()) {
+                description = "Dependency " + key + " matched NVD CVEs: " + result.cveIds;
+                if (result.maxCvssScore > 0) {
+                    description += " (Max CVSS: " + result.maxCvssScore + ")";
+                }
             } else {
                 description = "Dependency " + key + " scanned against NVD database.";
             }
@@ -85,44 +88,69 @@ public class SCAScanner {
     }
 
     /**
-     * Extracts real CVE IDs (e.g. CVE-2021-44228) from NVD JSON response.
+     * Parses the NVD JSON response to extract CVE IDs and the maximum CVSS base score.
      */
-    private Set<String> extractCveIds(String nvdResponse) {
-        Set<String> cveSet = new HashSet<>();
-        if (nvdResponse == null || nvdResponse.isEmpty() || nvdResponse.contains("Error fetching")) {
-            return cveSet;
+    private NvdResult parseNvdResponse(String nvdResponse) {
+        NvdResult result = new NvdResult();
+        if (nvdResponse == null || nvdResponse.isEmpty() || nvdResponse.startsWith("Error")) {
+            return result;
         }
 
-        Matcher matcher = CVE_PATTERN.matcher(nvdResponse);
-        while (matcher.find() && cveSet.size() < 5) { // Limit to top 5 distinct CVEs for readable response
-            cveSet.add(matcher.group());
+        try {
+            JsonNode root = objectMapper.readTree(nvdResponse);
+            JsonNode vulns = root.path("vulnerabilities");
+
+            if (vulns.isArray()) {
+                for (JsonNode vulnObj : vulns) {
+                    JsonNode cve = vulnObj.path("cve");
+                    String cveId = cve.path("id").asText(null);
+                    
+                    if (cveId != null && result.cveIds.size() < 5) {
+                        result.cveIds.add(cveId);
+                    }
+
+                    // Attempt to parse CVSS V3.1 or V3.0
+                    JsonNode metrics = cve.path("metrics");
+                    JsonNode cvssV31 = metrics.path("cvssMetricV31");
+                    if (cvssV31.isArray() && !cvssV31.isEmpty()) {
+                        double score = cvssV31.get(0).path("cvssData").path("baseScore").asDouble(0.0);
+                        result.maxCvssScore = Math.max(result.maxCvssScore, score);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore parse errors, fallback to empty
         }
-        return cveSet;
+
+        return result;
     }
 
-    /**
-     * Assesses severity based on extracted CVEs and known critical libraries.
-     */
-    private Severity assessSeverity(String artifactId, String version, Set<String> cveIds) {
-        String id = artifactId.toLowerCase();
-
-        // If NVD returned active CVEs
-        if (!cveIds.isEmpty()) {
-            if (id.contains("log4j") || id.contains("spring")) {
-                return Severity.CRITICAL;
-            }
-            return Severity.HIGH;
+    private Severity assessSeverity(String artifactId, String version, NvdResult result) {
+        if (result.maxCvssScore > 0) {
+            if (result.maxCvssScore >= 9.0) return Severity.CRITICAL;
+            if (result.maxCvssScore >= 7.0) return Severity.HIGH;
+            if (result.maxCvssScore >= 4.0) return Severity.MEDIUM;
+            return Severity.LOW;
         }
 
-        // Heuristic fallback for known vulnerable components
+        // Fallback heuristics if parsing fails or no CVSS data
+        if (!result.cveIds.isEmpty()) {
+            return Severity.HIGH;
+        }
+        
+        String id = artifactId.toLowerCase();
         if (id.contains("log4j") && (version.startsWith("1.") || version.startsWith("2.0") || version.startsWith("2.1"))) {
             return Severity.CRITICAL;
         }
-
         return Severity.MEDIUM;
     }
 
-    // 🔍 Extract dependencies from pom.xml
+    private static class NvdResult {
+        Set<String> cveIds = new HashSet<>();
+        double maxCvssScore = 0.0;
+    }
+
+    // Extract dependencies from pom.xml
     private List<Dependency> extractDependencies(File pomFile) {
 
         List<Dependency> dependencies = new ArrayList<>();
@@ -160,7 +188,6 @@ public class SCAScanner {
                 if (line.startsWith("<version>")) {
                     version = line.replace("<version>", "").replace("</version>", "");
 
-                    // Resolve property placeholders like ${spring.version}
                     if (version.startsWith("${") && version.endsWith("}")) {
                         String propKey = version.substring(2, version.length() - 1);
                         version = properties.getOrDefault(propKey, version);

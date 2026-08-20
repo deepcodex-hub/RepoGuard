@@ -1,0 +1,15 @@
+name: 'RepoGuard Scanner'
+description: 'Runs FAANG-grade SAST and SCA scanning on your repository.'
+branding:
+  icon: 'shield'
+  color: 'blue'
+inputs:
+  path:
+    description: 'Path to scan'
+    required: false
+    default: '.'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - '--cli.repoPath=${{ github.workspace }}/${{ inputs.path }}'
