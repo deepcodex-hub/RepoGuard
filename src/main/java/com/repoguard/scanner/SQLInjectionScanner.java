@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class SQLInjectionScanner {
@@ -23,55 +25,53 @@ public class SQLInjectionScanner {
         for (File file : javaFiles) {
             try {
                 CompilationUnit cu = StaticJavaParser.parse(file);
-                
-                // Visitor to find AST nodes representing vulnerabilities
-                cu.accept(new VoidVisitorAdapter<List<Vulnerability>>() {
-                    
+                // Track already-flagged lines to prevent duplicate detections
+                Set<Integer> flaggedLines = new HashSet<>();
+
+                cu.accept(new VoidVisitorAdapter<Void>() {
+
                     @Override
-                    public void visit(BinaryExpr n, List<Vulnerability> arg) {
-                        super.visit(n, arg);
-                        // Check for string concatenation (Operator.PLUS)
-                        if (n.getOperator() == BinaryExpr.Operator.PLUS) {
-                            // Does this concatenation involve a SQL keyword in a string literal?
+                    public void visit(BinaryExpr n, Void arg) {
+                        // Do NOT call super.visit() — prevents re-visiting child nodes
+                        int line = n.getBegin().isPresent() ? n.getBegin().get().line : 0;
+                        if (n.getOperator() == BinaryExpr.Operator.PLUS && !flaggedLines.contains(line)) {
                             boolean hasSql = n.findAll(StringLiteralExpr.class).stream()
                                     .map(StringLiteralExpr::getValue)
                                     .map(String::toUpperCase)
-                                    .anyMatch(val -> val.contains("SELECT ") || val.contains("INSERT ") || 
+                                    .anyMatch(val -> val.contains("SELECT ") || val.contains("INSERT ") ||
                                                      val.contains("UPDATE ") || val.contains("DELETE "));
-                            
                             if (hasSql) {
-                                arg.add(new Vulnerability(
-                                        "SQL_INJECTION",
-                                        Severity.CRITICAL,
-                                        file.getName(),
-                                        n.getBegin().isPresent() ? n.getBegin().get().line : 0,
+                                flaggedLines.add(line);
+                                vulnerabilities.add(new Vulnerability(
+                                        "SQL_INJECTION", Severity.CRITICAL, file.getName(), line,
                                         "AST Detection: SQL Injection via string concatenation in expression.",
                                         "Use PreparedStatement or parameterized queries."
                                 ));
                             }
                         }
+                        // Manually visit children to maintain traversal without duplication
+                        n.getLeft().accept(this, arg);
+                        n.getRight().accept(this, arg);
                     }
 
                     @Override
-                    public void visit(MethodCallExpr n, List<Vulnerability> arg) {
+                    public void visit(MethodCallExpr n, Void arg) {
                         super.visit(n, arg);
+                        int line = n.getBegin().isPresent() ? n.getBegin().get().line : 0;
                         String methodName = n.getNameAsString();
-                        // Look for raw execute calls common in JDBC Statement
-                        if (methodName.equals("execute") || methodName.equals("executeQuery") || methodName.equals("executeUpdate")) {
-                            // If the argument is a BinaryExpr (concatenation) or NameExpr (variable), it's highly suspicious
-                            if (n.getArguments().isNonEmpty() && !(n.getArgument(0) instanceof StringLiteralExpr)) {
-                                arg.add(new Vulnerability(
-                                        "SQL_INJECTION",
-                                        Severity.HIGH,
-                                        file.getName(),
-                                        n.getBegin().isPresent() ? n.getBegin().get().line : 0,
-                                        "AST Detection: Unsafe SQL execution with dynamic argument.",
-                                        "Replace with PreparedStatement to prevent injection."
-                                ));
-                            }
+                        if ((methodName.equals("execute") || methodName.equals("executeQuery") || methodName.equals("executeUpdate"))
+                                && n.getArguments().isNonEmpty()
+                                && !(n.getArgument(0) instanceof StringLiteralExpr)
+                                && !flaggedLines.contains(line)) {
+                            flaggedLines.add(line);
+                            vulnerabilities.add(new Vulnerability(
+                                    "SQL_INJECTION", Severity.HIGH, file.getName(), line,
+                                    "AST Detection: Unsafe SQL execution with dynamic argument.",
+                                    "Replace with PreparedStatement to prevent injection."
+                            ));
                         }
                     }
-                }, vulnerabilities);
+                }, null);
 
             } catch (Exception e) {
                 System.out.println("Error parsing file with JavaParser: " + file.getName());

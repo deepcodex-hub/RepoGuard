@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class XSSScanner {
@@ -23,58 +25,54 @@ public class XSSScanner {
         for (File file : javaFiles) {
             try {
                 CompilationUnit cu = StaticJavaParser.parse(file);
-                
-                cu.accept(new VoidVisitorAdapter<List<Vulnerability>>() {
-                    
+                Set<Integer> flaggedLines = new HashSet<>();
+
+                cu.accept(new VoidVisitorAdapter<Void>() {
+
                     @Override
-                    public void visit(MethodCallExpr n, List<Vulnerability> arg) {
+                    public void visit(MethodCallExpr n, Void arg) {
                         super.visit(n, arg);
+                        int line = n.getBegin().isPresent() ? n.getBegin().get().line : 0;
                         String methodName = n.getNameAsString();
-                        
-                        // Check for response.getWriter().print(...) or out.println(...)
-                        if (methodName.equals("print") || methodName.equals("println") || methodName.equals("write")) {
-                            if (n.getScope().isPresent()) {
-                                String scopeStr = n.getScope().get().toString();
-                                if (scopeStr.contains("getWriter") || scopeStr.equals("out") || scopeStr.equals("response")) {
-                                    // If argument is not just a hardcoded safe string, flag it
-                                    if (n.getArguments().isNonEmpty() && !(n.getArgument(0) instanceof StringLiteralExpr)) {
-                                        arg.add(new Vulnerability(
-                                                "XSS",
-                                                Severity.HIGH,
-                                                file.getName(),
-                                                n.getBegin().isPresent() ? n.getBegin().get().line : 0,
-                                                "AST Detection: Dynamic input written directly to HTTP response.",
-                                                "Escape user input using OWASP Java Encoder or HtmlUtils.htmlEscape()."
-                                        ));
-                                    }
+
+                        if ((methodName.equals("print") || methodName.equals("println") || methodName.equals("write"))
+                                && n.getScope().isPresent() && !flaggedLines.contains(line)) {
+                            String scopeStr = n.getScope().get().toString();
+                            if (scopeStr.contains("getWriter") || scopeStr.equals("out") || scopeStr.equals("response")) {
+                                if (n.getArguments().isNonEmpty() && !(n.getArgument(0) instanceof StringLiteralExpr)) {
+                                    flaggedLines.add(line);
+                                    vulnerabilities.add(new Vulnerability(
+                                            "XSS", Severity.HIGH, file.getName(), line,
+                                            "AST Detection: Dynamic input written directly to HTTP response.",
+                                            "Escape user input using OWASP Java Encoder or HtmlUtils.htmlEscape()."
+                                    ));
                                 }
                             }
                         }
                     }
 
                     @Override
-                    public void visit(BinaryExpr n, List<Vulnerability> arg) {
-                        super.visit(n, arg);
-                        // Check for HTML concatenation: "<div>" + userInput
-                        if (n.getOperator() == BinaryExpr.Operator.PLUS) {
+                    public void visit(BinaryExpr n, Void arg) {
+                        int line = n.getBegin().isPresent() ? n.getBegin().get().line : 0;
+                        if (n.getOperator() == BinaryExpr.Operator.PLUS && !flaggedLines.contains(line)) {
                             boolean hasHtml = n.findAll(StringLiteralExpr.class).stream()
                                     .map(StringLiteralExpr::getValue)
-                                    .anyMatch(val -> val.matches(".*<[a-zA-Z]+.*>.*")); // Simple HTML tag regex within a literal
-                            
-                            // If it has HTML and is concatenated with something else
+                                    .anyMatch(val -> val.matches(".*<[a-zA-Z]+.*>.*"));
+
                             if (hasHtml && !(n.getLeft() instanceof StringLiteralExpr && n.getRight() instanceof StringLiteralExpr)) {
-                                arg.add(new Vulnerability(
-                                        "XSS",
-                                        Severity.MEDIUM,
-                                        file.getName(),
-                                        n.getBegin().isPresent() ? n.getBegin().get().line : 0,
+                                flaggedLines.add(line);
+                                vulnerabilities.add(new Vulnerability(
+                                        "XSS", Severity.MEDIUM, file.getName(), line,
                                         "AST Detection: HTML built via string concatenation with variables.",
                                         "Use a templating engine (Thymeleaf, FreeMarker) or escape input."
                                 ));
                             }
                         }
+                        // Manually traverse children to avoid duplicate visits
+                        n.getLeft().accept(this, arg);
+                        n.getRight().accept(this, arg);
                     }
-                }, vulnerabilities);
+                }, null);
 
             } catch (Exception e) {
                 System.out.println("Error parsing file with JavaParser: " + file.getName());

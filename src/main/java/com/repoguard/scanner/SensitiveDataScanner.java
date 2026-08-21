@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class SensitiveDataScanner {
@@ -23,48 +25,58 @@ public class SensitiveDataScanner {
         for (File file : javaFiles) {
             try {
                 CompilationUnit cu = StaticJavaParser.parse(file);
-                
-                cu.accept(new VoidVisitorAdapter<List<Vulnerability>>() {
-                    
+                Set<Integer> flaggedLines = new HashSet<>();
+
+                cu.accept(new VoidVisitorAdapter<Void>() {
+
                     @Override
-                    public void visit(VariableDeclarator n, List<Vulnerability> arg) {
+                    public void visit(VariableDeclarator n, Void arg) {
                         super.visit(n, arg);
+                        int line = n.getBegin().isPresent() ? n.getBegin().get().line : 0;
                         String varName = n.getNameAsString().toLowerCase();
-                        
-                        // Check if it's assigned a hardcoded string
-                        if (n.getInitializer().isPresent() && n.getInitializer().get() instanceof StringLiteralExpr) {
-                            checkAndFlag(varName, n.getBegin().isPresent() ? n.getBegin().get().line : 0, arg, file.getName());
+
+                        if (n.getInitializer().isPresent()
+                                && n.getInitializer().get() instanceof StringLiteralExpr
+                                && !flaggedLines.contains(line)) {
+                            if (checkAndFlag(varName, line, vulnerabilities, file.getName())) {
+                                flaggedLines.add(line);
+                            }
                         }
                     }
 
                     @Override
-                    public void visit(AssignExpr n, List<Vulnerability> arg) {
+                    public void visit(AssignExpr n, Void arg) {
                         super.visit(n, arg);
+                        int line = n.getBegin().isPresent() ? n.getBegin().get().line : 0;
                         String targetName = n.getTarget().toString().toLowerCase();
-                        
-                        // Check if it's assigned a hardcoded string
-                        if (n.getValue() instanceof StringLiteralExpr) {
-                            checkAndFlag(targetName, n.getBegin().isPresent() ? n.getBegin().get().line : 0, arg, file.getName());
+
+                        if (n.getValue() instanceof StringLiteralExpr && !flaggedLines.contains(line)) {
+                            if (checkAndFlag(targetName, line, vulnerabilities, file.getName())) {
+                                flaggedLines.add(line);
+                            }
                         }
                     }
-                    
-                    private void checkAndFlag(String name, int line, List<Vulnerability> arg, String fileName) {
+
+                    private boolean checkAndFlag(String name, int line, List<Vulnerability> list, String fileName) {
                         if (name.contains("password")) {
-                            arg.add(new Vulnerability("HARDCODED_SECRET", Severity.HIGH, fileName, line,
+                            list.add(new Vulnerability("HARDCODED_SECRET", Severity.HIGH, fileName, line,
                                     "AST Detection: Hardcoded password literal assigned to variable.",
                                     "Use environment variables or a secrets manager."));
+                            return true;
                         } else if (name.contains("apikey") || name.contains("api_key")) {
-                            arg.add(new Vulnerability("HARDCODED_SECRET", Severity.HIGH, fileName, line,
+                            list.add(new Vulnerability("HARDCODED_SECRET", Severity.HIGH, fileName, line,
                                     "AST Detection: Hardcoded API key literal assigned to variable.",
                                     "Use environment variables or a secrets manager."));
+                            return true;
                         } else if (name.contains("token")) {
-                            arg.add(new Vulnerability("HARDCODED_SECRET", Severity.HIGH, fileName, line,
+                            list.add(new Vulnerability("HARDCODED_SECRET", Severity.HIGH, fileName, line,
                                     "AST Detection: Hardcoded token literal assigned to variable.",
                                     "Use environment variables or a secrets manager."));
+                            return true;
                         }
+                        return false;
                     }
-                    
-                }, vulnerabilities);
+                }, null);
 
             } catch (Exception e) {
                 System.out.println("Error parsing file with JavaParser: " + file.getName());
